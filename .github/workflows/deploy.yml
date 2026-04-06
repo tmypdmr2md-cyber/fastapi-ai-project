@@ -62,7 +62,7 @@ jobs:
         run: |
           set -e
           docker build -t $IMAGE_NAME:latest .
-          docker tag $IMAGE_NAME:latest cr.yandex.ru/${{ secrets.YC_FOLDER_ID }}/$IMAGE_NAME:latest
+          docker tag $IMAGE_NAME:latest cr.yandex.ru/crpnf0rvfiv5edm37kfc/$IMAGE_NAME:latest
 
       - name: Test Docker image
         run: |
@@ -76,14 +76,14 @@ jobs:
       - name: Push to Yandex Container Registry
         run: |
           set -e
-          docker push cr.yandex.ru/${{ secrets.YC_FOLDER_ID }}/$IMAGE_NAME:latest
+          docker push cr.yandex.ru/crpnf0rvfiv5edm37kfc/$IMAGE_NAME:latest
 
       - name: Deploy to Yandex Cloud
         run: |
           set -e
           $HOME/yandex-cloud/bin/yc serverless container revision deploy \
             --container-name $CONTAINER_NAME \
-            --image cr.yandex.ru/${{ secrets.YC_FOLDER_ID }}/$IMAGE_NAME:latest \
+            --image cr.yandex.ru/crpnf0rvfiv5edm37kfc/$IMAGE_NAME:latest \
             --cores 1 \
             --memory 512MB \
             --concurrency 5 \

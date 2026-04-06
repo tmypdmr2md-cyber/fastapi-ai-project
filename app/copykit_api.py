@@ -1,7 +1,7 @@
 import os
 
 from fastapi import FastAPI, HTTPException
-from copykit import generate_snippets, generate_keywords, validate_input_length
+from app.copykit import generate_snippets, generate_keywords, validate_input_length
 from dotenv import load_dotenv
 
 app = FastAPI()
@@ -15,7 +15,9 @@ MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", 100))
 
 
 @app.get("/generate_snippets")
-async def generate_snippet_api(promt: str = None):
+async def generate_snippet_api(promt: str):
+    if promt is None:
+        raise HTTPException(status_code=400, detail="Query parameter 'promt' is required")
     if not validate_input_length(promt):
         raise HTTPException(
             status_code=400,
@@ -29,7 +31,9 @@ async def generate_snippet_api(promt: str = None):
             "promt": promt}
 
 @app.get("/generate_keywords")
-async def generate_keywords_api(promt: str = None):
+async def generate_keywords_api(promt: str):
+    if promt is None:
+        raise HTTPException(status_code=400, detail="Query parameter 'promt' is required")
     if not validate_input_length(promt):
         raise HTTPException(
             status_code=400,
@@ -44,7 +48,9 @@ async def generate_keywords_api(promt: str = None):
             "promt": promt}
 
 @app.get("/generate_all")
-async def generate_all_api(promt: str = None):
+async def generate_all_api(promt: str):
+    if promt is None:
+        raise HTTPException(status_code=400, detail="Query parameter 'promt' is required")
     if not validate_input_length(promt):
         raise HTTPException(
             status_code=400,
@@ -58,5 +64,3 @@ async def generate_all_api(promt: str = None):
     return {"snippets": snippets,
             "keywords": keywords,
             "promt": promt}
-
-

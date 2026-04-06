@@ -27,24 +27,37 @@ jobs:
 
       - name: Setup Yandex Cloud CLI
         run: |
-          set -e
-          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          export PATH="$PATH:$HOME/.local/bin"
+          set -ex
+          mkdir -p $HOME/.local/bin
+          
+          # Download installer
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/install-yc.sh
+          chmod +x /tmp/install-yc.sh
+          
+          # Run installer
+          /tmp/install-yc.sh -a
+          
+          # Verify installation
+          ls -la $HOME/.local/bin/yc || (echo "YC not found in $HOME/.local/bin" && exit 1)
+          
+          # Add to PATH for subsequent steps
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           
+          # Setup configs
           mkdir -p ~/.config/yc
-          cat > ~/.config/yc/sa-key.json << 'EOF'
+          cat > ~/.config/yc/sa-key.json << 'EOFKEY'
           ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
-          EOF
+          EOFKEY
           
-          yc config set service-account-key ~/.config/yc/sa-key.json
-          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+          # Configure yc
+          $HOME/.local/bin/yc config set service-account-key ~/.config/yc/sa-key.json
+          $HOME/.local/bin/yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+          $HOME/.local/bin/yc --version
 
       - name: Configure Docker for Yandex Cloud
         run: |
           set -e
-          export PATH="$PATH:$HOME/.local/bin"
-          yc container registry configure-docker
+          $HOME/.local/bin/yc container registry configure-docker
 
       - name: Build Docker image
         run: |
@@ -70,7 +83,7 @@ jobs:
         run: |
           set -e
           export PATH="$PATH:$HOME/.local/bin"
-          yc serverless container revision deploy \
+          $HOME/.local/bin/yc serverless container revision deploy \
             --container-name $CONTAINER_NAME \
             --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest \
             --cores 1 \
@@ -83,5 +96,4 @@ jobs:
       - name: Get container URL
         run: |
           set -e
-          export PATH="$PATH:$HOME/.local/bin"
-          yc serverless container get $CONTAINER_NAME --format=json | jq '.url'
+          $HOME/.local/bin/

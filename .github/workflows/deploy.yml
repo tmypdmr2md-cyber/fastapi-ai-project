@@ -34,14 +34,15 @@ jobs:
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh -o /tmp/install-yc.sh
           chmod +x /tmp/install-yc.sh
           
-          # Run installer
+          # Run installer (adds to ~/.bashrc)
           /tmp/install-yc.sh -a
           
-          # Verify installation
-          ls -la $HOME/.local/bin/yc || (echo "YC not found in $HOME/.local/bin" && exit 1)
+          # Source bashrc to get yc in PATH
+          source ~/.bashrc
           
-          # Add to PATH for subsequent steps
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          # Verify yc is in PATH
+          which yc || (echo "YC not found in PATH" && exit 1)
+          yc --version
           
           # Setup configs
           mkdir -p ~/.config/yc
@@ -50,14 +51,15 @@ jobs:
           EOFKEY
           
           # Configure yc
-          $HOME/.local/bin/yc config set service-account-key ~/.config/yc/sa-key.json
-          $HOME/.local/bin/yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
-          $HOME/.local/bin/yc --version
+          yc config set service-account-key ~/.config/yc/sa-key.json
+          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+          yc --version
 
       - name: Configure Docker for Yandex Cloud
         run: |
           set -e
-          $HOME/.local/bin/yc container registry configure-docker
+          source ~/.bashrc
+          yc container registry configure-docker
 
       - name: Build Docker image
         run: |
@@ -74,16 +76,11 @@ jobs:
           docker stop test || true
           docker rm test || true
 
-      - name: Push to Yandex Container Registry
-        run: |
-          set -e
-          docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
-
       - name: Deploy to Yandex Cloud
         run: |
           set -e
-          export PATH="$PATH:$HOME/.local/bin"
-          $HOME/.local/bin/yc serverless container revision deploy \
+          source ~/.bashrc
+          yc serverless container revision deploy \
             --container-name $CONTAINER_NAME \
             --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest \
             --cores 1 \
@@ -96,4 +93,5 @@ jobs:
       - name: Get container URL
         run: |
           set -e
-          $HOME/.local/bin/
+          source ~/.bashrc
+          yc serverless container get $CONTAINER_NAME --format=json | jq '.url'

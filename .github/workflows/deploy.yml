@@ -131,7 +131,7 @@ jobs:
 
       # 9. Уведомление в Slack (Успех)
       - name: Notify Slack on success
-        if: success() && secrets.SLACK_WEBHOOK != ''
+        if: success()
         uses: 8398a7/action-slack@v3
         with:
           status: custom
@@ -140,14 +140,15 @@ jobs:
               text: '✅ CopyKit API deployed successfully',
               attachments: [{
                 color: 'good',
-                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}\nURL: ${{ steps.get-url.outputs.container_url }}`
+                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}`
               }]
             }
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true
 
       # 10. Уведомление в Slack (Ошибка)
       - name: Notify Slack on failure
-        if: failure() && secrets.SLACK_WEBHOOK != ''
+        if: failure()
         uses: 8398a7/action-slack@v3
         with:
           status: custom
@@ -160,3 +161,4 @@ jobs:
               }]
             }
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true

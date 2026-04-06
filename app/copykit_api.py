@@ -3,10 +3,9 @@ import os
 from fastapi import FastAPI, HTTPException
 from copykit import generate_snippets, generate_keywords, validate_input_length
 from dotenv import load_dotenv
-from mangum import Mangum
 
 app = FastAPI()
-handler = Mangum(app)
+
 
 MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", 100))
 

@@ -62,7 +62,7 @@ jobs:
         run: |
           set -e
           docker build -t $IMAGE_NAME:latest .
-          docker tag $IMAGE_NAME:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
+          docker tag $IMAGE_NAME:latest cr.yandex.ru/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
 
       - name: Test Docker image
         run: |
@@ -73,13 +73,17 @@ jobs:
           docker stop test || true
           docker rm test || true
 
+      - name: Push to Yandex Container Registry
+        run: |
+          set -e
+          docker push cr.yandex.ru/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
+
       - name: Deploy to Yandex Cloud
         run: |
           set -e
-          source ~/.bashrc
           $HOME/yandex-cloud/bin/yc serverless container revision deploy \
             --container-name $CONTAINER_NAME \
-            --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest \
+            --image cr.yandex.ru/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest \
             --cores 1 \
             --memory 512MB \
             --concurrency 5 \
@@ -90,4 +94,4 @@ jobs:
       - name: Get container URL
         run: |
           set -e
-          $HOME/yandex-cloud/bin/
+          $HOME/yandex-cloud/bin/yc serverless container get --name $CONTAINER_NAME --format json | grep -o '"url":"[^"]*' | cut -d'"' -f4

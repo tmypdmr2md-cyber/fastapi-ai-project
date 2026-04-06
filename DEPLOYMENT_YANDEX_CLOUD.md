@@ -62,6 +62,8 @@ docker build -t copykit-fastapi .
 cp .env.example .env
 
 # Отредактируйте .env и добавьте реальный GIGA_API ключ
+# Получить ключ: https://gigachat.ai/ → Личный кабинет → API Ключи
+# Формат ключа: это должен быть UUID, НЕ base64 строка
 # Используйте редактор (nano, vim, VS Code и т.д.)
 nano .env
 
@@ -444,6 +446,41 @@ app.add_middleware(
 
 ## Типичные проблемы
 
+### ❌ Ошибка: "Can't decode 'Authorization' header" от GigaChat
+
+```
+BadRequestError: 400 https://ngw.devices.sberbank.ru:9443/api/v2/oauth: 
+b'{"code":4,"message":"Can\'t decode \'Authorization\' header"}'
+```
+
+**Причины:**
+1. GIGA_API ключ неверный или в неправильном формате
+2. Ключ в формате base64 вместо UUID
+3. Ключ содержит пробелы или переносы строк
+
+**Решение:**
+```bash
+# 1. Проверь что ключ в формате UUID (не base64)
+# Правильный формат: 123e4567-e89b-12d3-a456-426614174000
+# Неправильный формат: MDE5ZDM2YTktZWYxMC03...
+
+# 2. Получи новый ключ со страницы https://gigachat.ai/
+# Личный кабинет → API Ключи → Копируй UUID
+
+# 3. Используй ключ БЕЗ кавычек в .env
+nano .env
+
+# Содержимое .env должно быть:
+# GIGA_API=your-actual-uuid-from-gigachat
+# (БЕЗ кавычек и БЕЗ base64 кодирования)
+
+# 4. Пересобрать без кэша
+docker build --no-cache -t copykit-fastapi .
+
+# 5. Запустить заново
+docker run --env-file .env -p 8080:8080 copykit-fastapi
+```
+docker run --env-file .env -p 8080:8080 fast-api
 ### ❌ Контейнер не стартует, ошибка `TIMEOUT`
 
 **Причины:**

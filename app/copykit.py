@@ -60,9 +60,14 @@ def generate_snippets(promt: str):
     load_dotenv()
     GIGA_API = os.getenv("GIGA_API")
 
+    if not GIGA_API:
+        raise ValueError("Переменная окружения GIGA_API не найдена. Проверь .env файл")
+
+    if " " in GIGA_API or "\n" in GIGA_API:
+        raise ValueError("GIGA_API содержит лишние пробелы или переносы строки")
 
     giga = GigaChat(
-        credentials=GIGA_API,
+        credentials=GIGA_API.strip(),
         verify_ssl_certs=False
     )
 
@@ -100,7 +105,7 @@ def generate_snippets(promt: str):
                         "content": final_prompt,
                     }
                 ],
-                "max_tokens": 50,
+                "max_tokens": 100,
             }
         )
 
@@ -114,8 +119,8 @@ def generate_snippets(promt: str):
         return model_response
 
     except Exception as e:
-        print("Ошибка:", e)
-        return []
+        print("Ошибка при запросе к GigaChat:", e)
+        raise
     finally:
         giga.close()
 
@@ -124,9 +129,14 @@ def generate_keywords(promt: str) -> list[str]:
     load_dotenv()
     GIGA_API = os.getenv("GIGA_API")
 
+    if not GIGA_API:
+        raise ValueError("Переменная окружения GIGA_API не найдена. Проверь .env файл")
+
+    if " " in GIGA_API or "\n" in GIGA_API:
+        raise ValueError("GIGA_API содержит лишние пробелы или переносы строки")
 
     giga = GigaChat(
-        credentials=GIGA_API,
+        credentials=GIGA_API.strip(),
         verify_ssl_certs=False
     )
 
@@ -174,7 +184,9 @@ def generate_keywords(promt: str) -> list[str]:
         return keywords
 
     except Exception as e:
-        print("Ошибка:", e)
+        print("Ошибка при запросе к GigaChat:", e)
+        raise
+        return []
     finally:
         giga.close()
 

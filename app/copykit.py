@@ -28,7 +28,7 @@ def main():
 
     print(f"User input: {user_input}")
 
-    if validate_length(user_input):
+    if validate_input_length(user_input):
         result_snippets = generate_snippets(user_input)
         result_keywords = generate_keywords(user_input)
 
@@ -37,13 +37,22 @@ def main():
         print(f"КЛЮЧЕВЫЕ СЛОВА: {result_keywords}")
     else:
         raise ValueError(
-            f"Длина запроса должна быть не больше {MAX_INPUT_LENGTH} символов.\n"
+            f"Длина запроса должна быть не больше {MAX_INPUT_LENGTH} символов и не меньше 3.\n"
             f"Длина вашего запроса: {len(user_input)} символов.\n"
-            f"Сократите запрос на {len(user_input) - MAX_INPUT_LENGTH} символов и попробуйте снова."
         )
 
-def validate_length(prompt: str) -> bool:
-    return len(prompt) <= MAX_INPUT_LENGTH
+def validate_input_length(promt: str = None):
+
+    if promt is None:
+        return False
+    
+    if len(promt) < 3:
+        return False
+    
+    if len(promt) > MAX_INPUT_LENGTH:
+        return False
+    
+    return True
 
 
 def generate_snippets(promt: str):

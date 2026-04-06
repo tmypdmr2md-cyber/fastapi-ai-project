@@ -38,3 +38,31 @@ uvicorn copykit_api:app --reload
 http://127.0.0.1:8000/docs
 ```
 
+
+
+brew install awscli
+
+
+aws configure
+
+_______
+
+AWS Access Key ID:
+AWS Secret Access Key:
+Default region name: eu-central-1
+Default output format: json
+_________
+
+npm install -g aws-cdk
+cdk --version
+
+
+mkdir cdk-infra
+cd cdk-infra
+cdk init app --language typescript
+
+npm install
+
+cdk bootstrap
+
+cdk deploy

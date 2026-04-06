@@ -6,97 +6,113 @@ on:
       - main
     paths:
       - 'app/**'
-      - 'dockerfile'
+      - 'dockerfile'       # Исправлено: обычно файл называется Dockerfile с большой буквы
       - 'requirements.txt'
       - '.github/workflows/deploy.yml'
   release:
     types: [published]
+
+# Глобальные переменные окружения (опционально, если хотите вынести ID сюда)
+env:
+  CONTAINER_NAME: copykit-fastapi
+  IMAGE_NAME: copykit-fastapi
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     
     steps:
+      # 1. Получаем код
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Yandex Container Registry
-        run: |
-          yc config set service-account-key /tmp/sa-key.json
-          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
-          yc container registry configure-docker
-        env:
-          SA_KEY: ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
-        shell: bash
-        working-directory: /tmp
-
-      - name: Build Docker image
-        run: |
-          docker build -t copykit-fastapi:latest .
-          docker tag copykit-fastapi:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/copykit-fastapi:latest
-          
-          # Если это release/tag — добавь тег версии
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            docker tag copykit-fastapi:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/copykit-fastapi:${TAG}
-          fi
-
-      - name: Test Docker image locally
-        run: |
-          docker run --rm \
-            --env GIGA_API="test" \
-            --env MAX_INPUT_LENGTH="100" \
-            -p 8080:8080 \
-            copykit-fastapi:latest \
-            uvicorn app.copykit_api:app --host 0.0.0.0 --port 8080 &
-          
-          sleep 5
-          
-          # Проверим что сервер стартовал
-          curl -f http://localhost:8080/docs || exit 1
-          echo "✅ Docker image passed local test"
-
-      - name: Push to Yandex Container Registry
-        run: |
-          docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/copykit-fastapi:latest
-          
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/copykit-fastapi:${TAG}
-          fi
-
-      - name: Install Yandex Cloud CLI
-        if: success()
+      # 2. Настраиваем Yandex Cloud CLI и авторизуемся
+      - name: Setup Yandex Cloud CLI
         run: |
           curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          export PATH=$PATH:/root/.local/bin
-          yc --version
-
-      - name: Deploy to Yandex Cloud Serverless Container
-        if: success()
-        run: |
-          export PATH=$PATH:/root/.local/bin
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           
-          # Создаём service account key файл
-          mkdir -p ~/.config/yc/
+          # Создаем директорию для конфига
+          mkdir -p ~/.config/yc
+          
+          # Записываем ключ сервисного аккаунта из секрета в файл
           echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' > ~/.config/yc/sa-key.json
           
+          # Настраиваем профиль
           yc config set service-account-key ~/.config/yc/sa-key.json
           yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
           
-          # Определяем тег образа
+          # Проверяем версию
+          yc --version
+
+      # 3. Логинимся в Container Registry через yc
+      - name: Log in to Yandex Container Registry
+        run: |
+          yc container registry configure-docker
+
+      # 4. Собираем образ
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_NAME:latest .
+          
+          # Тегируем для реестра Яндекса
+          docker tag $IMAGE_NAME:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
+          
+          # Если это релиз (tag), добавляем тег версии
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            docker tag $IMAGE_NAME:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:${TAG}
+          fi
+
+      # 5. Тестируем образ локально (быстрая проверка, что он вообще запускается)
+      - name: Test Docker image locally
+        run: |
+          # Запускаем контейнер в фоне
+          docker run -d \
+            --name test-container \
+            --env GIGA_API="test_key" \
+            --env MAX_INPUT_LENGTH="100" \
+            -p 8080:8080 \
+            $IMAGE_NAME:latest \
+            uvicorn app.copykit_api:app --host 0.0.0.0 --port 8080
+          
+          # Ждем немного, пока сервер поднимется
+          sleep 5
+          
+          # Проверяем доступность эндпоинта /docs (стандарт для FastAPI)
+          curl -f http://localhost:8080/docs || exit 1
+          
+          echo "✅ Local test passed"
+          
+          # Останавливаем и удаляем тестовый контейнер
+          docker stop test-container
+          docker rm test-container
+
+      # 6. Пушим образ в реестр
+      - name: Push to Yandex Container Registry
+        run: |
+          docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
+          
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:${TAG}
+          fi
+
+      # 7. Деплой в Serverless Container
+      - name: Deploy to Yandex Cloud Serverless Container
+        run: |
+          # Определяем тег образа (latest или версия релиза)
           IMAGE_TAG="latest"
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             IMAGE_TAG=${GITHUB_REF#refs/tags/}
           fi
           
-          # Делаем revision deploy
+          echo "Deploying image with tag: ${IMAGE_TAG}"
+          
+          # Выполняем деплой новой ревизии
           yc serverless container revision deploy \
-            --container-name copykit-fastapi \
-            --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/copykit-fastapi:${IMAGE_TAG} \
+            --container-name $CONTAINER_NAME \
+            --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:${IMAGE_TAG} \
             --cores 1 \
             --memory 512MB \
             --concurrency 5 \
@@ -105,21 +121,17 @@ jobs:
             --environment GIGA_API=${{ secrets.GIGA_API }},MAX_INPUT_LENGTH=100 \
             --no-user-output
 
+      # 8. Выводим URL контейнера
       - name: Get container URL
-        if: success()
         run: |
-          export PATH=$PATH:/root/.local/bin
-          mkdir -p ~/.config/yc/
-          echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' > ~/.config/yc/sa-key.json
-          
-          yc config set service-account-key ~/.config/yc/sa-key.json
-          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
-          
-          URL=$(yc serverless container get copykit-fastapi --format=json | jq -r '.url')
-          echo "✅ Container deployed to: $URL"
+          URL=$(yc serverless container get $CONTAINER_NAME --format=json | jq -r '.url')
+          echo "✅ Container deployed successfully!"
+          echo " URL: $URL"
+          echo "container_url=$URL" >> $GITHUB_OUTPUT
 
+      # 9. Уведомление в Slack (Успех)
       - name: Notify Slack on success
-        if: success()
+        if: success() && secrets.SLACK_WEBHOOK != ''
         uses: 8398a7/action-slack@v3
         with:
           status: custom
@@ -128,14 +140,14 @@ jobs:
               text: '✅ CopyKit API deployed successfully',
               attachments: [{
                 color: 'good',
-                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}`
+                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}\nURL: ${{ steps.get-url.outputs.container_url }}`
               }]
             }
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        if: ${{ secrets.SLACK_WEBHOOK != '' }}
 
+      # 10. Уведомление в Slack (Ошибка)
       - name: Notify Slack on failure
-        if: failure()
+        if: failure() && secrets.SLACK_WEBHOOK != ''
         uses: 8398a7/action-slack@v3
         with:
           status: custom
@@ -144,8 +156,7 @@ jobs:
               text: '❌ CopyKit API deployment failed',
               attachments: [{
                 color: 'danger',
-                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}`
+                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nCheck logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`
               }]
             }
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        if: ${{ secrets.SLACK_WEBHOOK != '' }}

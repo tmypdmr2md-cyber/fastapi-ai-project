@@ -126,39 +126,13 @@ jobs:
         run: |
           URL=$(yc serverless container get $CONTAINER_NAME --format=json | jq -r '.url')
           echo "✅ Container deployed successfully!"
-          echo " URL: $URL"
+          echo "URL: $URL"
           echo "container_url=$URL" >> $GITHUB_OUTPUT
 
-      # 9. Уведомление в Slack (Успех)
-      - name: Notify Slack on success
+      # 9. Успешный деплой
+      - name: Success message
         if: success()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: custom
-          custom_payload: |
-            {
-              text: '✅ CopyKit API deployed successfully',
-              attachments: [{
-                color: 'good',
-                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}`
-              }]
-            }
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        continue-on-error: true
-
-      # 10. Уведомление в Slack (Ошибка)
-      - name: Notify Slack on failure
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: custom
-          custom_payload: |
-            {
-              text: '❌ CopyKit API deployment failed',
-              attachments: [{
-                color: 'danger',
-                text: `Branch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nCheck logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`
-              }]
-            }
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        continue-on-error: true
+        run: |
+          echo "✅ CopyKit API deployment completed successfully"
+          echo "Container: $CONTAINER_NAME"
+          echo "Image: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/copykit-fastapi:latest"

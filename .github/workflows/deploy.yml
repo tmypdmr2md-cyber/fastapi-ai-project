@@ -15,6 +15,7 @@ on:
 env:
   CONTAINER_NAME: copykit-fastapi
   IMAGE_NAME: copykit-fastapi
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-deploy:
@@ -27,22 +28,22 @@ jobs:
       - name: Setup Yandex Cloud CLI
         run: |
           set -e
-          echo "Installing Yandex Cloud CLI..."
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          export PATH="$HOME/.local/bin:$PATH"
+          export PATH="$PATH:$HOME/.local/bin"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           
           mkdir -p ~/.config/yc
-          echo '${{ secrets.YC_SERVICE_ACCOUNT_KEY }}' > ~/.config/yc/sa-key.json
+          cat > ~/.config/yc/sa-key.json << 'EOF'
+          ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
+          EOF
           
           yc config set service-account-key ~/.config/yc/sa-key.json
           yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
-          yc --version
 
-      - name: Log in to Yandex Container Registry
+      - name: Configure Docker for Yandex Cloud
         run: |
           set -e
-          export PATH="$HOME/.local/bin:$PATH"
+          export PATH="$PATH:$HOME/.local/bin"
           yc container registry configure-docker
 
       - name: Build Docker image
@@ -50,59 +51,37 @@ jobs:
           set -e
           docker build -t $IMAGE_NAME:latest .
           docker tag $IMAGE_NAME:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
-          
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            docker tag $IMAGE_NAME:latest cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:${TAG}
-          fi
 
-      - name: Test Docker image locally
+      - name: Test Docker image
         run: |
           set -e
-          docker run -d --name test-container --env GIGA_API="test_key" --env MAX_INPUT_LENGTH="100" -p 8080:8080 $IMAGE_NAME:latest uvicorn app.copykit_api:app --host 0.0.0.0 --port 8080
+          docker run -d --name test --env GIGA_API=test --env MAX_INPUT_LENGTH=100 -p 8080:8080 $IMAGE_NAME:latest uvicorn app.copykit_api:app --host 0.0.0.0 --port 8080
           sleep 5
-          curl -f http://localhost:8080/docs || (docker logs test-container && exit 1)
-          docker stop test-container && docker rm test-container
+          curl -f http://localhost:8080/docs || (docker logs test && exit 1)
+          docker stop test || true
+          docker rm test || true
 
       - name: Push to Yandex Container Registry
         run: |
           set -e
           docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest
-          
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-            docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:${TAG}
-          fi
 
-      - name: Deploy to Yandex Cloud Serverless Container
+      - name: Deploy to Yandex Cloud
         run: |
           set -e
-          export PATH="$HOME/.local/bin:$PATH"
-          
-          IMAGE_TAG="latest"
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            IMAGE_TAG=${GITHUB_REF#refs/tags/}
-          fi
-          
+          export PATH="$PATH:$HOME/.local/bin"
           yc serverless container revision deploy \
             --container-name $CONTAINER_NAME \
-            --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:${IMAGE_TAG} \
+            --image cr.yandex/${{ secrets.YC_REGISTRY_ID }}/$IMAGE_NAME:latest \
             --cores 1 \
             --memory 512MB \
             --concurrency 5 \
             --execution-timeout 60s \
             --service-account-id ${{ secrets.YC_SERVICE_ACCOUNT_ID }} \
-            --environment GIGA_API=${{ secrets.GIGA_API }},MAX_INPUT_LENGTH=100 \
-            --no-user-output
+            --environment GIGA_API=${{ secrets.GIGA_API }},MAX_INPUT_LENGTH=100
 
       - name: Get container URL
         run: |
           set -e
-          export PATH="$HOME/.local/bin:$PATH"
-          URL=$(yc serverless container get $CONTAINER_NAME --format=json | jq -r '.url')
-          echo "✅ Deployment completed!"
-          echo "URL: $URL"
-
-      - name: Success message
-        if: success()
-        run: echo "✅ CopyKit API deployed successfully to Yandex Cloud"
+          export PATH="$PATH:$HOME/.local/bin"
+          yc serverless container get $CONTAINER_NAME --format=json | jq '.url'

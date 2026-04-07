@@ -15,7 +15,8 @@ on:
 env:
   CONTAINER_NAME: copykit-fastapi
   IMAGE_NAME: copykit-fastapi
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Эта переменная нужна только если вы используете старые экшены JS, для yc-cli она не обязательна, но пусть будет
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
 jobs:
   build-and-deploy:
@@ -27,36 +28,43 @@ jobs:
 
       - name: Setup Yandex Cloud CLI
         run: |
-          set -ex
+          set -e
           
-          # Run installer
+          # 1. Install yc
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
           
-          # YC installs to ~/yandex-cloud/bin - add to PATH
-          export PATH="$PATH:$HOME/yandex-cloud/bin"
+          # 2. Add to PATH properly for subsequent steps
           echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
           
-          # Verify yc is available
-          $HOME/yandex-cloud/bin/yc --version
+          # 3. Verify installation
+          yc --version
           
-          # Setup configs
+          # 4. Setup Service Account Key correctly
+          # Создаем директорию
           mkdir -p ~/.config/yc
+          
+          # Записываем ключ из секрета в файл
+          # Важно: используем echo с одинарными кавычками вокруг EOF, чтобы переменные не раскрывались раньше времени
           cat > ~/.config/yc/sa-key.json << 'EOFKEY'
           ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
           EOFKEY
           
-          # Configure yc
-          $HOME/yandex-cloud/bin/yc config set service-account-key ~/.config/yc/sa-key.json
+          # 5. Инициализируем профиль с этим ключом
+          # Команда 'yc config profile create' создает новый профиль и привязывает ключ
+          yc config profile create sa-profile
+          yc config set service-account-key ~/.config/yc/sa-key.json
           
-          # Only set folder-id if it's provided
+          # 6. Set folder ID (optional but recommended)
           if [ ! -z "${{ secrets.YC_FOLDER_ID }}" ]; then
-            $HOME/yandex-cloud/bin/yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+            yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
           fi
 
       - name: Configure Docker for Yandex Cloud
         run: |
           set -e
-          $HOME/yandex-cloud/bin/yc container registry configure-docker
+          # Эта команда автоматически сделает docker login, используя текущий профиль yc (sa-profile)
+          # Она возьмет IAM токен за вас
+          yc container registry configure-docker
 
       - name: Build Docker image
         run: |
@@ -67,11 +75,27 @@ jobs:
       - name: Test Docker image
         run: |
           set -e
-          docker run -d --name test --env GIGA_API=test --env MAX_INPUT_LENGTH=100 -p 8080:8080 $IMAGE_NAME:latest uvicorn app.copykit_api:app --host 0.0.0.0 --port 8080
+          # Запускаем контейнер
+          docker run -d --name test-container \
+            --env GIGA_API=test \
+            --env MAX_INPUT_LENGTH=100 \
+            -p 8080:8080 \
+            $IMAGE_NAME:latest \
+            uvicorn app.copykit_api:app --host 0.0.0.0 --port 8080
+          
+          # Ждем запуска
           sleep 5
-          curl -f http://localhost:8080/docs || (docker logs test && exit 1)
-          docker stop test || true
-          docker rm test || true
+          
+          # Проверяем здоровье
+          if ! curl -f http://localhost:8080/docs; then
+            echo "Health check failed. Logs:"
+            docker logs test-container
+            exit 1
+          fi
+          
+          # Очистка
+          docker stop test-container || true
+          docker rm test-container || true
 
       - name: Push to Yandex Container Registry
         run: |
@@ -81,7 +105,7 @@ jobs:
       - name: Deploy to Yandex Cloud
         run: |
           set -e
-          $HOME/yandex-cloud/bin/yc serverless container revision deploy \
+          yc serverless container revision deploy \
             --container-name $CONTAINER_NAME \
             --image cr.yandex.ru/crpnf0rvfiv5edm37kfc/$IMAGE_NAME:latest \
             --cores 1 \
@@ -94,4 +118,7 @@ jobs:
       - name: Get container URL
         run: |
           set -e
-          $HOME/yandex-cloud/bin/yc serverless container get --name $CONTAINER_NAME --format json | grep -o '"url":"[^"]*' | cut -d'"' -f4
+          # Получаем URL нового контейнера
+          URL=$(yc serverless container get --name $CONTAINER_NAME --format json | jq -r '.url')
+          echo "Container is available at: $URL"
+          echo "CONTAINER_URL=$URL" >> $GITHUB_OUTPUT

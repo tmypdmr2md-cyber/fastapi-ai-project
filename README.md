@@ -122,19 +122,40 @@ curl http://localhost:8080/docs
 - ✅ Обработка ошибок и валидация входных данных
 - ✅ .dockerignore настроен
 - ✅ .env.example подготовлен
-- ⚠️ Следующий шаг: деплой на Yandex Cloud (см. [DEPLOYMENT_YANDEX_CLOUD.md](./DEPLOYMENT_YANDEX_CLOUD.md))
+- ✅ `deploy.sh` скрипт готов
+- ✅ **Готово к деплою! Запустите: `./deploy.sh`**
 
 ## 🌐 Деплой на Yandex Cloud Serverless Containers
 
-Полная пошаговая инструкция: **[DEPLOYMENT_YANDEX_CLOUD.md](./DEPLOYMENT_YANDEX_CLOUD.md)**
+### 🚀 Быстрый деплой (Скрипт)
 
-Краткий алгоритм:
-1. Инициализировать Yandex CLI
-2. Создать Container Registry
-3. Собрать и запушить Docker образ
-4. Создать Serverless Container
-5. Получить публичный URL
-6. Подключить к фронтенду (Next.js)
+```bash
+# 1. Установить переменные окружения
+export YC_REGISTRY_ID="crXXXXXXXXXXXXXXXXXX"       # ID вашего Container Registry
+export YC_FOLDER_ID="b1XXXXXXXXXXXXXXXXXXXX"      # ID вашей папки в YC
+
+# 2. Запустить автоматический скрипт
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Скрипт автоматически:
+- ✅ Собирает Docker образ
+- ✅ Тестирует его локально
+- ✅ Pushит в Yandex Registry
+- ✅ Развёртывает на Serverless Container
+- ✅ Выдаёт публичный URL
+
+### 📖 Полная инструкция
+
+Детальная пошаговая инструкция: **[DEPLOYMENT_MANUAL.md](./DEPLOYMENT_MANUAL.md)**
+
+Там описано:
+- Установка YC CLI
+- Создание сервис-аккаунта
+- Создание Container Registry
+- Все команды для ручного развертывания
+- Troubleshooting
 
 ## 🔗 Интеграция с Next.js фронтендом
 

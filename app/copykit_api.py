@@ -13,7 +13,6 @@ MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", 100))
 # http://127.0.0.1:8000/docs
 
 
-
 @app.get("/generate_snippets")
 async def generate_snippet_api(promt: str):
     if promt is None:
